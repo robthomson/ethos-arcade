@@ -32,6 +32,7 @@ Merged FrSky Ethos game suite with a single front menu:
 - MissileCmd
 - Dojo
 - GaLuaxian
+- Shooter
 
 ## Layout
 

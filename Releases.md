@@ -1,3 +1,11 @@
+# 1.0.1
+
+Additional games
+- Game: Shooter
+- Game: Dojo
+
+Support for non english radios.
+
 # 1.0.0
 
 - Initial release of Ethos Arcade.
@@ -9,5 +17,5 @@
 - Game: LuaBreaks
 - Game: Gates
 - Game: MissileCmd
-- Game: Dojo
 - Game: GaLuaxian
+
