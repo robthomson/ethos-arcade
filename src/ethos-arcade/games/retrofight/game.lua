@@ -186,6 +186,8 @@ local function applyConfigSideEffects(state)
     state.profile = DIFFICULTY_PROFILES[state.config.difficulty] or DIFFICULTY_PROFILES[DIFFICULTY_NORMAL]
 end
 
+local saveStateConfig
+
 local function setConfigValue(state, key, value, skipSave)
     if not (state and state.config) then
         return
@@ -379,7 +381,7 @@ local function loadStateConfig()
     return config
 end
 
-local function saveStateConfig(state)
+saveStateConfig = function(state)
     if not (state and state.config and io and io.open) then
         return false
     end
