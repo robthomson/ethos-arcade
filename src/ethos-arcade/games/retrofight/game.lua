@@ -20,10 +20,10 @@ local ACTIVE_INVALIDATE_DT = 1 / ACTIVE_RENDER_FPS
 local IDLE_INVALIDATE_DT = 1 / IDLE_RENDER_FPS
 
 local MAX_HEALTH = 100
-local PLAYER_SPEED = 1550
-local ENEMY_SPEED = 920
+local PLAYER_SPEED = 2100
+local ENEMY_SPEED = 1300
 local MOVE_DEADZONE = 24
-local GRAVITY = 3400
+local GRAVITY = 4200
 local JUMP_VELOCITY = 820
 local ARENA_MARGIN = 40
 local FLOOR_OFFSET = 46
@@ -32,8 +32,8 @@ local PUNCH_TIME = 0.35
 local PUNCH_HIT_TIME = 0.18
 local PUNCH_COOLDOWN = 0.35
 local HURT_TIME = 0.28
-local FIRE_REARM_CENTER = 200
-local FIRE_TRIGGER_HIGH = 520
+local FIRE_REARM_CENTER = 120
+local FIRE_TRIGGER_HIGH = 120
 local JUMP_REARM_LOW = 200
 local JUMP_TRIGGER_HIGH = 520
 local ENEMY_JUMP_COOLDOWN = 0.9
@@ -41,6 +41,9 @@ local ENEMY_JUMP_CHANCE = 0.8
 
 local SPRITE_W = 160
 local SPRITE_H = 220
+local MIN_SEPARATION = 80
+local EFFECT_SIZE = 120
+local EFFECT_DURATION = 0.55
 
 local function keyMatches(value, ...)
     for i = 1, select("#", ...) do
@@ -111,8 +114,12 @@ local function playTone(freq, duration, pause)
     pcall(system.playTone, freq, duration or 30, pause or 0)
 end
 
-local function setColor(r, g, b)
+local function setColor(r, g, b, a)
     if not (lcd and lcd.color and lcd.RGB) then
+        return
+    end
+    if a ~= nil then
+        pcall(lcd.color, lcd.RGB(r, g, b, a))
         return
     end
     pcall(lcd.color, lcd.RGB(r, g, b))
@@ -422,7 +429,9 @@ local function loadAssets(state)
         p1 = loadFighterAssets("p1", false),
         p1Flip = loadFighterAssets("p1", true),
         p2 = loadFighterAssets("p2", false),
-        p2Flip = loadFighterAssets("p2", true)
+        p2Flip = loadFighterAssets("p2", true),
+        pow = loadBitmapAsset(assetPathCandidates("pow.png")),
+        bam = loadBitmapAsset(assetPathCandidates("bam.png"))
     }
 end
 
@@ -515,7 +524,9 @@ local function updatePlayer(state, dt)
         if player.hurtTimer <= 0 and player.punchTimer <= 0 then
             setAnim(player, "idle")
         end
-        return
+        if not player.jumping then
+            return
+        end
     end
 
     if player.punchCooldown > 0 then
@@ -529,6 +540,14 @@ local function updatePlayer(state, dt)
             player.hitApplied = true
             if math.abs(player.x - enemy.x) <= PUNCH_RANGE then
                 applyDamage(enemy, 12)
+                local ex = enemy.x + (SPRITE_W * 0.5) - (EFFECT_SIZE * 0.5)
+                local ey = enemy.y - (EFFECT_SIZE * 0.7)
+                state.hitEffect = {
+                    x = clamp(ex, 0, TARGET_W - EFFECT_SIZE),
+                    y = clamp(ey, 0, TARGET_H - EFFECT_SIZE),
+                    timer = EFFECT_DURATION,
+                    usePow = (math.random() < 0.5)
+                }
                 if math.random() < 0.35 then
                     state.frontSwap = not state.frontSwap
                 end
@@ -539,14 +558,18 @@ local function updatePlayer(state, dt)
             player.hitApplied = false
             setAnim(player, "idle")
         end
-        return
+        if not player.jumping then
+            return
+        end
     end
 
     if state.fireRequested and player.punchCooldown <= 0 then
         state.fireRequested = false
         player.hitApplied = false
         startPunch(player)
-        return
+        if not player.jumping then
+            return
+        end
     end
 
     local moveX = normalizeStick(sourceValue(state.moveSourceX))
@@ -557,19 +580,16 @@ local function updatePlayer(state, dt)
         player.x = player.x + (moveX / 1024) * PLAYER_SPEED * dt
         player.x = clamp(player.x, state.arenaLeft, state.arenaRight - SPRITE_W)
         player.facing = moveX > 0 and 1 or -1
-        setAnim(player, "walk")
+        if player.punchTimer <= 0 and player.hurtTimer <= 0 then
+            setAnim(player, "walk")
+        end
     else
-        setAnim(player, "idle")
+        if player.punchTimer <= 0 and player.hurtTimer <= 0 then
+            setAnim(player, "idle")
+        end
     end
 
-    local fireValue = normalizeStick(sourceValue(state.fireSource))
-    if math.abs(fireValue) < FIRE_REARM_CENTER then
-        state.fireArmed = true
-    end
-    if state.fireArmed and fireValue > FIRE_TRIGGER_HIGH then
-        state.fireArmed = false
-        state.fireRequested = true
-    end
+    -- Punch is driven by Page button events only.
 
     local jumpValue = normalizeStick(sourceValue(state.jumpSource))
     if jumpValue < JUMP_REARM_LOW then
@@ -611,6 +631,14 @@ local function updateEnemy(state, dt)
             enemy.hitApplied = true
             if math.abs(enemy.x - player.x) <= PUNCH_RANGE then
                 applyDamage(player, 10)
+                local ex = player.x + (SPRITE_W * 0.5) - (EFFECT_SIZE * 0.5)
+                local ey = player.y - (EFFECT_SIZE * 0.7)
+                state.hitEffect = {
+                    x = clamp(ex, 0, TARGET_W - EFFECT_SIZE),
+                    y = clamp(ey, 0, TARGET_H - EFFECT_SIZE),
+                    timer = EFFECT_DURATION,
+                    usePow = (math.random() < 0.5)
+                }
                 if math.random() < 0.35 then
                     state.frontSwap = not state.frontSwap
                 end
@@ -669,6 +697,29 @@ local function updateGame(state, dt)
     updateEnemy(state, dt)
     updateVertical(state, state.player, dt)
     updateVertical(state, state.enemy, dt)
+    if state.player then
+        state.player.animTime = (state.player.animTime or 0) + dt
+    end
+    if state.enemy then
+        state.enemy.animTime = (state.enemy.animTime or 0) + dt
+    end
+    if state.hitEffect and state.hitEffect.timer then
+        state.hitEffect.timer = state.hitEffect.timer - dt
+        if state.hitEffect.timer <= 0 then
+            state.hitEffect = nil
+        end
+    end
+
+    if state.player and state.enemy then
+        local dx = state.enemy.x - state.player.x
+        local minDist = MIN_SEPARATION
+        if math.abs(dx) < minDist then
+            local push = (minDist - math.abs(dx)) * 0.5
+            local dir = dx >= 0 and 1 or -1
+            state.player.x = clamp(state.player.x - (push * dir), state.arenaLeft, state.arenaRight - SPRITE_W)
+            state.enemy.x = clamp(state.enemy.x + (push * dir), state.arenaLeft, state.arenaRight - SPRITE_W)
+        end
+    end
 
     if (state.player.ko or state.enemy.ko) and state.running then
         state.running = false
@@ -705,12 +756,13 @@ local function drawFighter(state, fighter, frames)
         return
     end
     local anim = fighter.anim or "idle"
-    if fighter.punchTimer and fighter.punchTimer > 0 and fighter.punchElapsed then
-        local toggle = (math.floor(fighter.punchElapsed * 28) % 2) == 0
-        anim = toggle and "punch" or "idle"
-    end
     local framesForAnim = frames[anim] or frames.idle or {}
-    local fps = (anim == "walk") and 6 or 4
+    local fps = 4
+    if anim == "walk" then
+        fps = 6
+    elseif anim == "punch" then
+        fps = 12
+    end
     local looped = (anim == "idle" or anim == "walk")
     local frame = animFrame(framesForAnim, fighter.animTime, fps, looped) or framesForAnim[1]
     if frame then
@@ -719,19 +771,6 @@ local function drawFighter(state, fighter, frames)
         drawRectScaled(state, fighter.x, fighter.y, SPRITE_W, SPRITE_H)
     end
 
-    if fighter.punchTimer and fighter.punchTimer > 0 and lcd and lcd.drawCircle then
-        local progress = clamp(1 - (fighter.punchTimer / PUNCH_TIME), 0, 1)
-        local cx = fighter.x + (SPRITE_W * 0.5)
-        local cy = fighter.y + (SPRITE_H * 0.45)
-        local r = 8 + (progress * 40)
-        local r2 = r + 6
-        local sx = math.floor(state.offsetX + (cx * state.scale))
-        local sy = math.floor(state.offsetY + (cy * state.scale))
-        local sr = math.max(1, math.floor(r * state.scale))
-        local sr2 = math.max(1, math.floor(r2 * state.scale))
-        lcd.drawCircle(sx, sy, sr)
-        lcd.drawCircle(sx, sy, sr2)
-    end
 end
 
 local function drawHud(state)
@@ -743,32 +782,32 @@ end
 local function drawOverlay(state)
     local centerX = TARGET_W * 0.5
     if not state.running then
-        if state.winner then
-            drawTextScaled(state, centerX - 60, 120, "KO")
-            drawTextScaled(state, centerX - 80, 150, state.winner .. " Wins")
-            drawTextScaled(state, centerX - 120, 190, "Press Enter to restart")
-        else
-            local boxW = 360
-            local boxH = 110
-            local boxX = math.floor(centerX - (boxW * 0.5))
-            local boxY = 128
-            if lcd and lcd.drawFilledRectangle then
-                local sx = math.floor(state.offsetX + (boxX * state.scale))
-                local sy = math.floor(state.offsetY + (boxY * state.scale))
-                local sw = math.max(1, math.floor(boxW * state.scale))
-                local sh = math.max(1, math.floor(boxH * state.scale))
-                setColor(0, 0, 0)
-                lcd.drawFilledRectangle(sx, sy, sw, sh)
-                if lcd.drawRectangle then
-                    setColor(255, 255, 255)
-                    lcd.drawRectangle(sx, sy, sw, sh, 1)
-                end
+        local boxW = 440
+        local boxH = 140
+        local boxX = math.floor(centerX - (boxW * 0.5))
+        local boxY = 128
+        if lcd and lcd.drawFilledRectangle then
+            local sx = math.floor(state.offsetX + (boxX * state.scale))
+            local sy = math.floor(state.offsetY + (boxY * state.scale))
+            local sw = math.max(1, math.floor(boxW * state.scale))
+            local sh = math.max(1, math.floor(boxH * state.scale))
+            setColor(0, 0, 0, 0.9)
+            lcd.drawFilledRectangle(sx, sy, sw, sh)
+            if lcd.drawRectangle then
+                setColor(255, 255, 255)
+                lcd.drawRectangle(sx, sy, sw, sh, 1)
             end
-            setColor(255, 255, 255)
+        end
+        setColor(255, 255, 255)
+        if state.winner then
+            drawTextScaled(state, centerX - 40, 140, "KO")
+            drawTextScaled(state, centerX - 110, 168, state.winner .. " Wins")
+            drawTextScaled(state, centerX - 140, 200, "Press Enter to restart")
+        else
             drawTextScaled(state, centerX - 120, 140, "RetroFight")
-            drawTextScaled(state, centerX - 160, 165, "Aileron move | Rudder punch")
-            drawTextScaled(state, centerX - 140, 190, "Elevator jump")
-            drawTextScaled(state, centerX - 140, 215, "Enter start, Exit back")
+            drawTextScaled(state, centerX - 190, 168, "Aileron move | Rudder punch")
+            drawTextScaled(state, centerX - 120, 194, "Elevator jump")
+            drawTextScaled(state, centerX - 140, 218, "Enter start, Exit back")
         end
     end
 end
@@ -913,6 +952,12 @@ function game.paint(state)
     else
         drawFighter(state, state.enemy, p2Frames)
         drawFighter(state, state.player, p1Frames)
+    end
+    if state.hitEffect then
+        local effect = state.hitEffect.usePow and state.assets.pow or state.assets.bam
+        if effect then
+            drawBitmapScaled(state, effect, state.hitEffect.x, state.hitEffect.y, EFFECT_SIZE, EFFECT_SIZE)
+        end
     end
     drawHud(state)
     drawOverlay(state)
