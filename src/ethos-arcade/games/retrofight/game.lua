@@ -204,6 +204,33 @@ local function setConfigValue(state, key, value, skipSave)
     end
 end
 
+local function playTone(freq, duration, pause)
+    if not (system and system.playTone) then
+        return
+    end
+    pcall(system.playTone, freq, duration or 30, pause or 0)
+end
+
+local function forceInvalidate(state)
+    if not state then
+        return
+    end
+    state.nextInvalidateAt = 0
+    if lcd and lcd.invalidate then
+        lcd.invalidate()
+    end
+end
+
+local function closeSettingsForm(state, suppressExit)
+    if suppressExit ~= false then
+        suppressExitEvents(state)
+    end
+    state.settingsFormOpen = false
+    state.pendingFormClear = true
+    flushPendingFormClear(state)
+    forceInvalidate(state)
+end
+
 local function openSettingsForm(state)
     if not (form and form.clear and form.addLine and form.addChoiceField) then
         return false
@@ -247,33 +274,6 @@ local function openSettingsForm(state)
     return true
 end
 
-local function playTone(freq, duration, pause)
-    if not (system and system.playTone) then
-        return
-    end
-    pcall(system.playTone, freq, duration or 30, pause or 0)
-end
-
-local function forceInvalidate(state)
-    if not state then
-        return
-    end
-    state.nextInvalidateAt = 0
-    if lcd and lcd.invalidate then
-        lcd.invalidate()
-    end
-end
-
-local function closeSettingsForm(state, suppressExit)
-    if suppressExit ~= false then
-        suppressExitEvents(state)
-    end
-    state.settingsFormOpen = false
-    state.pendingFormClear = true
-    flushPendingFormClear(state)
-    forceInvalidate(state)
-end
-
 local function setColor(r, g, b, a)
     if not (lcd and lcd.color and lcd.RGB) then
         return
@@ -283,6 +283,18 @@ local function setColor(r, g, b, a)
         return
     end
     pcall(lcd.color, lcd.RGB(r, g, b))
+end
+
+local function clearScreen(state, r, g, b)
+    if not (state and lcd and lcd.drawFilledRectangle) then
+        return
+    end
+    if r ~= nil then
+        setColor(r, g or r, b or r)
+    end
+    local w = state.windowW or TARGET_W
+    local h = state.windowH or TARGET_H
+    lcd.drawFilledRectangle(0, 0, w, h)
 end
 
 local function scriptDir()
@@ -1175,6 +1187,10 @@ function game.paint(state)
     if not state then return end
 
     refreshGeometry(state)
+    if state.settingsFormOpen then
+        clearScreen(state, 0, 0, 0)
+        return
+    end
     keepScreenAwake(state)
     updateFrameScale(state)
 
