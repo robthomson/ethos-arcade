@@ -39,6 +39,13 @@ local games = {
         iconPath = "games/luadefender/gfx/icon.png"
     },
     {
+        id = "retrofight",
+        name = "Dojo",
+        description = "8-bit stick-and-punch brawler",
+        modulePath = "games/retrofight/game.lua",
+        iconPath = "games/retrofight/gfx/icon.png"
+    },
+    {
         id = "luabreaks",
         name = "LuaBreaks",
         description = "Brick breaker blitz",
@@ -212,6 +219,45 @@ local function loadGameModule(def)
     return module
 end
 
+local function formatError(err)
+    local msg = tostring(err)
+    if debug and debug.traceback then
+        return debug.traceback(msg, 2)
+    end
+    return msg
+end
+
+local function setLastError(state, prefix, err)
+    if not state then
+        return
+    end
+    local short = string.format("%s: %s", prefix, tostring(err))
+    local full = string.format("%s: %s", prefix, formatError(err))
+    state.lastError = short
+    state.lastErrorFull = full
+    print(full)
+end
+
+local function wrapText(text, maxLen)
+    local lines = {}
+    local line = ""
+    local limit = maxLen or 60
+    for word in tostring(text):gmatch("%S+") do
+        if #line == 0 then
+            line = word
+        elseif (#line + 1 + #word) <= limit then
+            line = line .. " " .. word
+        else
+            lines[#lines + 1] = line
+            line = word
+        end
+    end
+    if line ~= "" then
+        lines[#lines + 1] = line
+    end
+    return lines
+end
+
 local function clearMenuForm(state)
     if state then
         state.menuBuilt = false
@@ -317,7 +363,7 @@ local function startGame(state, index)
 
     local module, err = loadGameModule(def)
     if not module then
-        state.lastError = string.format("%s: %s", def.name, tostring(err))
+        setLastError(state, def.name, err)
         clearMenuForm(state)
         return false
     end
@@ -328,7 +374,7 @@ local function startGame(state, index)
     if type(module.create) == "function" then
         local okCreate, created = pcall(module.create)
         if not okCreate then
-            state.lastError = string.format("%s create() failed: %s", def.name, tostring(created))
+            setLastError(state, def.name .. " create() failed", created)
             return false
         end
         if created ~= nil then
@@ -344,13 +390,14 @@ local function startGame(state, index)
     if type(module.wakeup) == "function" then
         local okWake, wakeErr = pcall(module.wakeup, state.activeState)
         if not okWake then
-            state.lastError = string.format("%s wakeup() failed: %s", def.name, tostring(wakeErr))
+            setLastError(state, def.name .. " wakeup() failed", wakeErr)
             stopActiveGame(state)
             return false
         end
     end
 
     state.lastError = nil
+    state.lastErrorFull = nil
     return true
 end
 
@@ -436,7 +483,11 @@ local function buildMenuForm(state)
     end
 
     if state.lastError then
-        form.addLine("Last error: " .. tostring(state.lastError))
+        form.addLine("Last error:")
+        local lines = wrapText(state.lastErrorFull or state.lastError, 60)
+        for i = 1, math.min(#lines, 6) do
+            form.addLine(lines[i])
+        end
     end
 
     state.menuBuilt = true
@@ -451,7 +502,7 @@ local function handleActiveGameEvent(state, category, value)
     if type(module.event) == "function" then
         local okEvent, eventResult = pcall(module.event, state.activeState, category, value)
         if not okEvent then
-            state.lastError = string.format("%s event() failed: %s", state.activeDef.name, tostring(eventResult))
+            setLastError(state, state.activeDef.name .. " event() failed", eventResult)
             stopActiveGame(state)
             return true
         end
@@ -487,6 +538,7 @@ local function createState()
         menuClearRequested = false,
         lastFocusKick = 0,
         lastError = nil,
+        lastErrorFull = nil,
         suppressExitUntil = 0
     }
 
@@ -516,7 +568,7 @@ function app.wakeup(state)
     if state.activeModule and type(state.activeModule.wakeup) == "function" then
         local okWake, wakeErr = pcall(state.activeModule.wakeup, state.activeState)
         if not okWake then
-            state.lastError = string.format("%s wakeup() failed: %s", state.activeDef.name, tostring(wakeErr))
+            setLastError(state, state.activeDef.name .. " wakeup() failed", wakeErr)
             stopActiveGame(state)
             return
         end
@@ -553,7 +605,7 @@ function app.paint(state)
     if state.activeModule and type(state.activeModule.paint) == "function" then
         local okPaint, paintErr = pcall(state.activeModule.paint, state.activeState)
         if not okPaint then
-            state.lastError = string.format("%s paint() failed: %s", state.activeDef.name, tostring(paintErr))
+            setLastError(state, state.activeDef.name .. " paint() failed", paintErr)
             stopActiveGame(state)
         end
         return

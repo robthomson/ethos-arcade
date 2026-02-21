@@ -9,4 +9,5 @@
 - Game: LuaBreaks
 - Game: Gates
 - Game: MissileCmd
+- Game: Dojo
 - Game: GaLuaxian

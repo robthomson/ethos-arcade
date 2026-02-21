@@ -30,6 +30,7 @@ Merged FrSky Ethos game suite with a single front menu:
 - LuaBreaks
 - Gates
 - MissileCmd
+- Dojo
 - GaLuaxian
 
 ## Layout
@@ -43,6 +44,7 @@ Merged FrSky Ethos game suite with a single front menu:
 - `src/ethos-arcade/games/luabreaks` - LuaBreaks module/assets
 - `src/ethos-arcade/games/gates` - Gates module/assets
 - `src/ethos-arcade/games/missilecmd` - MissileCmd module/assets
+- `src/ethos-arcade/games/retrofight` - Dojo module/assets
 - `src/ethos-arcade/games/gulaxian` - GaLuaxian module/assets
 - `.vscode` - deploy scripts/tasks/launch configuration
 - `deploy.json` - deploy target config (`tgt_name = ethos-arcade`)
