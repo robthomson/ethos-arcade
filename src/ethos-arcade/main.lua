@@ -299,6 +299,10 @@ local function stopActiveGame(state)
             print(string.format("[arcade gc] before=%sKB after=%.1fKB", beforeText, after))
         end
     end
+
+    if lcd and lcd.invalidate then
+        pcall(lcd.invalidate)
+    end
 end
 
 local function startGame(state, index)
