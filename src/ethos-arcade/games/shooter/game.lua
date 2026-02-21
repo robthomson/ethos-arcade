@@ -97,7 +97,10 @@ local function isSettingsOpenEvent(category, value)
     if isConfigButtonEvent(category, value) then
         return true
     end
-    return isKeyCategory(category) and keyMatches(value, KEY_ENTER_LONG)
+    if isKeyCategory(category) and keyMatches(value, KEY_PAGE_LONG) then
+        return true
+    end
+    return false
 end
 
 local function isFireButtonEvent(category, value)
@@ -433,7 +436,7 @@ local function handleShot(state)
             playTone(1200, 60, 0)
         else
             state.score = state.score - 15
-            playTone(240, 80, 0)
+            playTone(110, 120, 0)
         end
     else
         state.score = state.score - 1
@@ -458,6 +461,9 @@ end
 local function closeSettingsForm(state)
     state.settingsFormOpen = false
     state.pendingFormClear = true
+    if lcd and lcd.invalidate then
+        pcall(lcd.invalidate)
+    end
 end
 
 local function openSettingsForm(state)
@@ -499,6 +505,10 @@ local function openSettingsForm(state)
         form.addButton(backLine, nil, {text = "Back to Game", press = backAction})
     elseif form.addTextButton then
         form.addTextButton(backLine, nil, "Back to Game", backAction)
+    end
+
+    if lcd and lcd.invalidate then
+        pcall(lcd.invalidate)
     end
 
     return true
@@ -595,7 +605,7 @@ local function render(state)
         lcd.drawText(boxX + 14, boxY + 88, "Fire: Page")
         lcd.drawText(boxX + 14, boxY + 112, "Enter: start")
         lcd.drawText(boxX + 14, boxY + 136, "Exit: back to arcade")
-        lcd.drawText(boxX + 14, boxY + 160, "Long Enter: settings")
+        lcd.drawText(boxX + 14, boxY + 160, "Long Page: settings")
     end
 
 end
@@ -643,6 +653,10 @@ function game.wakeup(state)
     end
 
     refreshGeometry(state)
+
+    if state.settingsFormOpen then
+        return
+    end
 
     if state.pendingFormClear and not state.settingsFormOpen then
         if safeFormClear() then
@@ -736,6 +750,9 @@ end
 
 function game.paint(state)
     if not state then
+        return
+    end
+    if state.settingsFormOpen then
         return
     end
     render(state)
