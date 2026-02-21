@@ -72,6 +72,13 @@ local games = {
         description = "Scrolling space shooter",
         modulePath = "games/gulaxian/game.lua",
         iconPath = "games/gulaxian/gfx/icon.png"
+    },
+    {
+        id = "shooter",
+        name = "Shooter",
+        description = "Duck hunt parody shooter",
+        modulePath = "games/shooter/game.lua",
+        iconPath = "games/shooter/gfx/icon.png"
     }
 }
 
