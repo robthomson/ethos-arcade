@@ -45,6 +45,29 @@ local function nowSeconds()
     end
     return 0
 end
+local function killPendingKeyEvents(keyValue)
+    if not (system and system.killEvents) then
+        return
+    end
+
+    if keyValue ~= nil then
+        local ok = pcall(system.killEvents, keyValue)
+        if ok then
+            return
+        end
+    end
+
+    pcall(system.killEvents)
+end
+
+local function suppressExitEvents(state, windowSeconds)
+    if not state then
+        return
+    end
+    state.suppressExitUntil = nowSeconds() + (windowSeconds or 0.25)
+    killPendingKeyEvents(KEY_EXIT_BREAK)
+    killPendingKeyEvents(KEY_EXIT_FIRST)
+end
 
 local function keyMatches(value, ...)
     for i = 1, select("#", ...) do
@@ -305,6 +328,7 @@ local function resetRound(state)
     state.hits = 0
     state.lastSpawn = nowSeconds()
     state.running = true
+    state.showIntro = false
 end
 
 local function updateAim(state, dt)
@@ -540,12 +564,24 @@ local function render(state)
     lcd.drawText(6, 18, string.format("Best %d", state.config.bestScore or 0))
     lcd.drawText(6, 34, string.format("Diff %s", difficultyLabel(state.config.difficulty)))
 
-    if not state.running then
-        local msgY = math.floor(state.height * 0.65)
-        lcd.drawText(6, msgY, "Enter: start")
-        lcd.drawText(6, msgY + 16, "Page: fire")
-        lcd.drawText(6, msgY + 32, "Exit: back to arcade")
-        lcd.drawText(6, msgY + 48, "Long Enter: settings")
+    if not state.running and state.showIntro then
+        local boxW = math.floor(state.width * 0.72)
+        local boxH = math.floor(state.height * 0.38)
+        local boxX = math.floor((state.width - boxW) * 0.5)
+        local boxY = math.floor((state.height - boxH) * 0.5)
+
+        setColor(24, 28, 32)
+        lcd.drawFilledRectangle(boxX, boxY, boxW, boxH)
+        setColor(180, 190, 200)
+        lcd.drawRectangle(boxX, boxY, boxW, boxH)
+
+        setColor(255, 255, 255)
+        lcd.drawText(boxX + 12, boxY + 10, "Shooter")
+        lcd.drawText(boxX + 12, boxY + 32, "Aim: Aileron / Elevator")
+        lcd.drawText(boxX + 12, boxY + 50, "Fire: Page")
+        lcd.drawText(boxX + 12, boxY + 68, "Enter: start")
+        lcd.drawText(boxX + 12, boxY + 86, "Exit: back to arcade")
+        lcd.drawText(boxX + 12, boxY + 104, "Long Enter: settings")
     end
 
 end
@@ -561,6 +597,8 @@ function game.create()
         shots = 0,
         hits = 0,
         lastSpawn = 0,
+        showIntro = true,
+        suppressExitUntil = 0,
         settingsFormOpen = false,
         pendingFormClear = false
     }
@@ -618,6 +656,18 @@ function game.event(state, category, value)
         return false
     end
 
+    local now = nowSeconds()
+    if state.suppressExitUntil and now < state.suppressExitUntil then
+        if category == EVT_CLOSE then
+            return true
+        end
+        if isExitKeyEvent(category, value) then
+            return true
+        end
+    elseif state.suppressExitUntil and state.suppressExitUntil ~= 0 then
+        state.suppressExitUntil = 0
+    end
+
     if state.settingsFormOpen then
         if category == EVT_CLOSE then
             closeSettingsForm(state)
@@ -633,6 +683,8 @@ function game.event(state, category, value)
     if category == EVT_CLOSE then
         if state.running then
             state.running = false
+            state.showIntro = true
+            suppressExitEvents(state)
             return true
         end
         return false
@@ -658,6 +710,8 @@ function game.event(state, category, value)
     if isExitKeyEvent(category, value) then
         if state.running then
             state.running = false
+            state.showIntro = true
+            suppressExitEvents(state)
             return true
         end
         return false
