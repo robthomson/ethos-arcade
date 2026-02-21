@@ -148,6 +148,36 @@ local function flushPendingFormClear(state)
     end
 end
 
+local function normalizeDifficulty(value)
+    if value == DIFFICULTY_EASY then
+        return DIFFICULTY_EASY
+    end
+    if value == DIFFICULTY_HARD then
+        return DIFFICULTY_HARD
+    end
+    return DIFFICULTY_NORMAL
+end
+
+local function difficultyChoiceValue(difficulty)
+    if normalizeDifficulty(difficulty) == DIFFICULTY_EASY then
+        return DIFFICULTY_CHOICE_EASY
+    end
+    if normalizeDifficulty(difficulty) == DIFFICULTY_HARD then
+        return DIFFICULTY_CHOICE_HARD
+    end
+    return DIFFICULTY_CHOICE_NORMAL
+end
+
+local function difficultyFromChoice(choice)
+    if tonumber(choice) == DIFFICULTY_CHOICE_EASY then
+        return DIFFICULTY_EASY
+    end
+    if tonumber(choice) == DIFFICULTY_CHOICE_HARD then
+        return DIFFICULTY_HARD
+    end
+    return DIFFICULTY_NORMAL
+end
+
 local function applyConfigSideEffects(state)
     if not (state and state.config) then
         return
@@ -172,16 +202,6 @@ local function setConfigValue(state, key, value, skipSave)
     if not skipSave then
         saveStateConfig(state)
     end
-end
-
-local function closeSettingsForm(state, suppressExit)
-    if suppressExit ~= false then
-        suppressExitEvents(state)
-    end
-    state.settingsFormOpen = false
-    state.pendingFormClear = true
-    flushPendingFormClear(state)
-    forceInvalidate(state)
 end
 
 local function openSettingsForm(state)
@@ -232,6 +252,26 @@ local function playTone(freq, duration, pause)
         return
     end
     pcall(system.playTone, freq, duration or 30, pause or 0)
+end
+
+local function forceInvalidate(state)
+    if not state then
+        return
+    end
+    state.nextInvalidateAt = 0
+    if lcd and lcd.invalidate then
+        lcd.invalidate()
+    end
+end
+
+local function closeSettingsForm(state, suppressExit)
+    if suppressExit ~= false then
+        suppressExitEvents(state)
+    end
+    state.settingsFormOpen = false
+    state.pendingFormClear = true
+    flushPendingFormClear(state)
+    forceInvalidate(state)
 end
 
 local function setColor(r, g, b, a)
@@ -285,36 +325,6 @@ local function clamp(v, lo, hi)
         return hi
     end
     return v
-end
-
-local function normalizeDifficulty(value)
-    if value == DIFFICULTY_EASY then
-        return DIFFICULTY_EASY
-    end
-    if value == DIFFICULTY_HARD then
-        return DIFFICULTY_HARD
-    end
-    return DIFFICULTY_NORMAL
-end
-
-local function difficultyChoiceValue(difficulty)
-    if normalizeDifficulty(difficulty) == DIFFICULTY_EASY then
-        return DIFFICULTY_CHOICE_EASY
-    end
-    if normalizeDifficulty(difficulty) == DIFFICULTY_HARD then
-        return DIFFICULTY_CHOICE_HARD
-    end
-    return DIFFICULTY_CHOICE_NORMAL
-end
-
-local function difficultyFromChoice(choice)
-    if tonumber(choice) == DIFFICULTY_CHOICE_EASY then
-        return DIFFICULTY_EASY
-    end
-    if tonumber(choice) == DIFFICULTY_CHOICE_HARD then
-        return DIFFICULTY_HARD
-    end
-    return DIFFICULTY_NORMAL
 end
 
 local function readConfigFile()
@@ -406,16 +416,6 @@ local function keepScreenAwake(state)
 
     if system and system.resetTimeout then
         pcall(system.resetTimeout)
-    end
-end
-
-local function forceInvalidate(state)
-    if not state then
-        return
-    end
-    state.nextInvalidateAt = 0
-    if lcd and lcd.invalidate then
-        lcd.invalidate()
     end
 end
 
@@ -1060,6 +1060,8 @@ local function createState()
         suppressExitUntil = 0
     }
 
+    state.config = loadStateConfig()
+    applyConfigSideEffects(state)
     refreshGeometry(state)
     loadAssets(state)
     resetRound(state)
@@ -1102,8 +1104,22 @@ function game.event(state, category, value)
         state.suppressExitUntil = 0
     end
 
-    if isSettingsOpenEvent(category, value) then
-        return true
+    if state.settingsFormOpen then
+        if category == EVT_CLOSE then
+            closeSettingsForm(state, true)
+            return true
+        end
+        if isExitKeyEvent(category, value) then
+            closeSettingsForm(state, true)
+            return true
+        end
+        return false
+    end
+
+    if isSettingsOpenEvent(category, value) and not state.running then
+        if openSettingsForm(state) then
+            return true
+        end
     end
 
     if category == EVT_CLOSE then
