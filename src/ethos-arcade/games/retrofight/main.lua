@@ -16,7 +16,7 @@ end
 
 local function init()
     system.registerSystemTool({
-        name = "RetroFight",
+        name = "Dojo",
         icon = loadToolIcon(),
         create = game.create,
         wakeup = game.wakeup,

@@ -40,7 +40,7 @@ local games = {
     },
     {
         id = "retrofight",
-        name = "RetroFight",
+        name = "Dojo",
         description = "8-bit stick-and-punch brawler",
         modulePath = "games/retrofight/game.lua",
         iconPath = "games/retrofight/gfx/icon.png"

@@ -7,6 +7,21 @@ local FIRE_SOURCE_MEMBER = 0
 local CONFIG_BUTTON_CATEGORY = 0
 local CONFIG_BUTTON_VALUE = 128
 local FIRE_BUTTON_VALUE = 96
+local CONFIG_FILE = "retrofight.cfg"
+local CONFIG_VERSION = 1
+
+local DIFFICULTY_EASY = "easy"
+local DIFFICULTY_NORMAL = "normal"
+local DIFFICULTY_HARD = "hard"
+
+local DIFFICULTY_CHOICE_EASY = 1
+local DIFFICULTY_CHOICE_NORMAL = 2
+local DIFFICULTY_CHOICE_HARD = 3
+local DIFFICULTY_CHOICES_FORM = {
+    {"Easy", DIFFICULTY_CHOICE_EASY},
+    {"Normal", DIFFICULTY_CHOICE_NORMAL},
+    {"Hard", DIFFICULTY_CHOICE_HARD}
+}
 
 local TARGET_W = 784
 local TARGET_H = 406
@@ -44,6 +59,11 @@ local SPRITE_H = 220
 local MIN_SEPARATION = 40
 local EFFECT_SIZE = 80
 local EFFECT_DURATION = 0.45
+local DIFFICULTY_PROFILES = {
+    [DIFFICULTY_EASY] = {enemySpeed = 0.70, enemyDamage = 8, enemyJump = 0.5},
+    [DIFFICULTY_NORMAL] = {enemySpeed = 1.0, enemyDamage = 10, enemyJump = 0.8},
+    [DIFFICULTY_HARD] = {enemySpeed = 1.25, enemyDamage = 14, enemyJump = 1.15}
+}
 
 local function keyMatches(value, ...)
     for i = 1, select("#", ...) do
@@ -107,6 +127,106 @@ local function suppressExitEvents(state, windowSeconds)
     state.suppressExitUntil = nowSeconds() + (windowSeconds or 0.35)
 end
 
+local function safeFormClear()
+    if not (form and form.clear) then
+        return false
+    end
+    return pcall(function()
+        form.clear()
+    end)
+end
+
+local function flushPendingFormClear(state)
+    if not state or not state.pendingFormClear then
+        return
+    end
+    if state.settingsFormOpen then
+        return
+    end
+    if safeFormClear() then
+        state.pendingFormClear = false
+    end
+end
+
+local function applyConfigSideEffects(state)
+    if not (state and state.config) then
+        return
+    end
+    state.config.difficulty = normalizeDifficulty(state.config.difficulty)
+    state.profile = DIFFICULTY_PROFILES[state.config.difficulty] or DIFFICULTY_PROFILES[DIFFICULTY_NORMAL]
+end
+
+local function setConfigValue(state, key, value, skipSave)
+    if not (state and state.config) then
+        return
+    end
+
+    if key == "difficulty" then
+        state.config.difficulty = normalizeDifficulty(value)
+    else
+        return
+    end
+
+    applyConfigSideEffects(state)
+
+    if not skipSave then
+        saveStateConfig(state)
+    end
+end
+
+local function closeSettingsForm(state, suppressExit)
+    if suppressExit ~= false then
+        suppressExitEvents(state)
+    end
+    state.settingsFormOpen = false
+    state.pendingFormClear = true
+    flushPendingFormClear(state)
+    forceInvalidate(state)
+end
+
+local function openSettingsForm(state)
+    if not (form and form.clear and form.addLine and form.addChoiceField) then
+        return false
+    end
+
+    if not safeFormClear() then
+        state.settingsFormOpen = false
+        return false
+    end
+    state.settingsFormOpen = true
+
+    local infoLine = form.addLine("Dojo")
+    if form.addStaticText then
+        form.addStaticText(infoLine, nil, "Settings (Exit/Back to return)")
+    end
+
+    local diffLine = form.addLine("Difficulty")
+    form.addChoiceField(
+        diffLine,
+        nil,
+        DIFFICULTY_CHOICES_FORM,
+        function()
+            return difficultyChoiceValue(state.config.difficulty)
+        end,
+        function(newValue)
+            setConfigValue(state, "difficulty", difficultyFromChoice(newValue))
+        end
+    )
+
+    local backLine = form.addLine("")
+    local backAction = function()
+        closeSettingsForm(state, true)
+    end
+
+    if form.addButton then
+        form.addButton(backLine, nil, {text = "Back", press = backAction})
+    elseif form.addTextButton then
+        form.addTextButton(backLine, nil, "Back", backAction)
+    end
+
+    return true
+end
+
 local function playTone(freq, duration, pause)
     if not (system and system.playTone) then
         return
@@ -145,6 +265,18 @@ end
 
 local SCRIPT_DIR = scriptDir() or ""
 
+local function configPathCandidates()
+    local paths = {}
+    if SCRIPT_DIR ~= "" then
+        paths[#paths + 1] = SCRIPT_DIR .. CONFIG_FILE
+    end
+    paths[#paths + 1] = "SCRIPTS:/ethos-arcade/games/retrofight/" .. CONFIG_FILE
+    paths[#paths + 1] = "/scripts/ethos-arcade/games/retrofight/" .. CONFIG_FILE
+    paths[#paths + 1] = "SD:/scripts/ethos-arcade/games/retrofight/" .. CONFIG_FILE
+    paths[#paths + 1] = "games/retrofight/" .. CONFIG_FILE
+    return paths
+end
+
 local function clamp(v, lo, hi)
     if v < lo then
         return lo
@@ -153,6 +285,98 @@ local function clamp(v, lo, hi)
         return hi
     end
     return v
+end
+
+local function normalizeDifficulty(value)
+    if value == DIFFICULTY_EASY then
+        return DIFFICULTY_EASY
+    end
+    if value == DIFFICULTY_HARD then
+        return DIFFICULTY_HARD
+    end
+    return DIFFICULTY_NORMAL
+end
+
+local function difficultyChoiceValue(difficulty)
+    if normalizeDifficulty(difficulty) == DIFFICULTY_EASY then
+        return DIFFICULTY_CHOICE_EASY
+    end
+    if normalizeDifficulty(difficulty) == DIFFICULTY_HARD then
+        return DIFFICULTY_CHOICE_HARD
+    end
+    return DIFFICULTY_CHOICE_NORMAL
+end
+
+local function difficultyFromChoice(choice)
+    if tonumber(choice) == DIFFICULTY_CHOICE_EASY then
+        return DIFFICULTY_EASY
+    end
+    if tonumber(choice) == DIFFICULTY_CHOICE_HARD then
+        return DIFFICULTY_HARD
+    end
+    return DIFFICULTY_NORMAL
+end
+
+local function readConfigFile()
+    local values = {}
+    if not (io and io.open) then
+        return values
+    end
+
+    local f
+    for _, path in ipairs(configPathCandidates()) do
+        f = io.open(path, "r")
+        if f then
+            break
+        end
+    end
+    if not f then
+        return values
+    end
+
+    while true do
+        local okRead, line = pcall(f.read, f, "*l")
+        if not okRead or not line then
+            break
+        end
+        local key, value = line:match("^%s*([%w_]+)%s*=%s*(.-)%s*$")
+        if key and value and value ~= "" then
+            values[key] = value
+        end
+    end
+
+    pcall(f.close, f)
+    return values
+end
+
+local function loadStateConfig()
+    local values = readConfigFile()
+    local config = {
+        difficulty = normalizeDifficulty(values.difficulty)
+    }
+    return config
+end
+
+local function saveStateConfig(state)
+    if not (state and state.config and io and io.open) then
+        return false
+    end
+
+    local f
+    for _, path in ipairs(configPathCandidates()) do
+        f = io.open(path, "w")
+        if f then
+            break
+        end
+    end
+    if not f then
+        return false
+    end
+
+    f:write("version=", CONFIG_VERSION, "\n")
+    f:write("difficulty=", normalizeDifficulty(state.config.difficulty), "\n")
+    f:close()
+    return true
 end
 
 local function keepScreenAwake(state)
@@ -805,7 +1029,7 @@ local function drawOverlay(state)
             drawTextScaled(state, centerX - 110, 168, state.winner .. " Wins")
             drawTextScaled(state, centerX - 140, 200, "Press Enter to restart")
         else
-            drawTextScaled(state, centerX - 120, 140, "RetroFight")
+            drawTextScaled(state, centerX - 90, 140, "Dojo")
             drawTextScaled(state, centerX - 190, 168, "Aileron move | Rudder punch")
             drawTextScaled(state, centerX - 120, 194, "Elevator jump")
             drawTextScaled(state, centerX - 140, 218, "Enter start, Exit back")
