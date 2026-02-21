@@ -27,10 +27,10 @@ local GRAVITY = 4200
 local JUMP_VELOCITY = 820
 local ARENA_MARGIN = 40
 local FLOOR_OFFSET = 46
-local PUNCH_RANGE = 70
-local PUNCH_TIME = 0.35
+local PUNCH_RANGE = 110
+local PUNCH_TIME = 0.22
 local PUNCH_HIT_TIME = 0.18
-local PUNCH_COOLDOWN = 0.35
+local PUNCH_COOLDOWN = 0.18
 local HURT_TIME = 0.28
 local FIRE_REARM_CENTER = 120
 local FIRE_TRIGGER_HIGH = 120
@@ -41,9 +41,9 @@ local ENEMY_JUMP_CHANCE = 0.8
 
 local SPRITE_W = 160
 local SPRITE_H = 220
-local MIN_SEPARATION = 80
+local MIN_SEPARATION = 40
 local EFFECT_SIZE = 80
-local EFFECT_DURATION = 0.55
+local EFFECT_DURATION = 0.45
 
 local function keyMatches(value, ...)
     for i = 1, select("#", ...) do
@@ -481,11 +481,19 @@ local function canFight(fighter)
     return fighter and not fighter.ko and fighter.health > 0
 end
 
-local function startPunch(fighter)
+local function startPunch(state, fighter)
     fighter.punchTimer = PUNCH_TIME
     fighter.punchElapsed = 0
     playTone(980, 20, 0)
     setAnim(fighter, "punch")
+    if state then
+        state.punchEffect = {
+            x = fighter.x + (SPRITE_W * 0.5) - (EFFECT_SIZE * 0.5),
+            y = fighter.y - (EFFECT_SIZE * 0.65),
+            timer = EFFECT_DURATION,
+            usePow = (math.random() < 0.5)
+        }
+    end
 end
 
 local function applyDamage(target, amount)
@@ -524,9 +532,6 @@ local function updatePlayer(state, dt)
         if player.hurtTimer <= 0 and player.punchTimer <= 0 then
             setAnim(player, "idle")
         end
-        if not player.jumping then
-            return
-        end
     end
 
     if player.punchCooldown > 0 then
@@ -548,9 +553,7 @@ local function updatePlayer(state, dt)
                     timer = EFFECT_DURATION,
                     usePow = (math.random() < 0.5)
                 }
-                if math.random() < 0.35 then
-                    state.frontSwap = not state.frontSwap
-                end
+                state.frontSwap = true
             end
         end
         if player.punchTimer <= 0 then
@@ -558,18 +561,12 @@ local function updatePlayer(state, dt)
             player.hitApplied = false
             setAnim(player, "idle")
         end
-        if not player.jumping then
-            return
-        end
     end
 
-    if state.fireRequested and player.punchCooldown <= 0 then
+    if state.fireRequested and player.punchCooldown <= 0 and player.punchTimer <= 0 then
         state.fireRequested = false
         player.hitApplied = false
-        startPunch(player)
-        if not player.jumping then
-            return
-        end
+        startPunch(state, player)
     end
 
     local moveX = normalizeStick(sourceValue(state.moveSourceX))
@@ -639,9 +636,7 @@ local function updateEnemy(state, dt)
                     timer = EFFECT_DURATION,
                     usePow = (math.random() < 0.5)
                 }
-                if math.random() < 0.35 then
-                    state.frontSwap = not state.frontSwap
-                end
+                state.frontSwap = false
             end
         end
         if enemy.punchTimer <= 0 then
@@ -655,7 +650,7 @@ local function updateEnemy(state, dt)
     local dist = player.x - enemy.x
     if math.abs(dist) <= PUNCH_RANGE and enemy.punchCooldown <= 0 then
         enemy.hitApplied = false
-        startPunch(enemy)
+        startPunch(state, enemy)
         return
     end
 
@@ -709,12 +704,18 @@ local function updateGame(state, dt)
             state.hitEffect = nil
         end
     end
+    if state.punchEffect and state.punchEffect.timer then
+        state.punchEffect.timer = state.punchEffect.timer - dt
+        if state.punchEffect.timer <= 0 then
+            state.punchEffect = nil
+        end
+    end
 
     if state.player and state.enemy then
         local dx = state.enemy.x - state.player.x
         local minDist = MIN_SEPARATION
         if math.abs(dx) < minDist then
-            local push = (minDist - math.abs(dx)) * 0.5
+            local push = (minDist - math.abs(dx)) * 0.35
             local dir = dx >= 0 and 1 or -1
             state.player.x = clamp(state.player.x - (push * dir), state.arenaLeft, state.arenaRight - SPRITE_W)
             state.enemy.x = clamp(state.enemy.x + (push * dir), state.arenaLeft, state.arenaRight - SPRITE_W)
@@ -918,7 +919,12 @@ function game.event(state, category, value)
     end
 
     if isFireButtonEvent(category, value) then
-        state.fireRequested = true
+        if state.player and canFight(state.player) then
+            -- Always punch immediately, regardless of motion/cooldown.
+            state.player.punchCooldown = 0
+            state.player.hitApplied = false
+            startPunch(state, state.player)
+        end
         return true
     end
 
@@ -946,7 +952,15 @@ function game.paint(state)
     if state.enemy and state.enemy.facing == -1 and state.assets.p2Flip then
         p2Frames = state.assets.p2Flip
     end
-    if state.frontSwap then
+    local playerFront = (state.player and state.player.punchTimer and state.player.punchTimer > 0)
+    local enemyFront = (state.enemy and state.enemy.punchTimer and state.enemy.punchTimer > 0)
+    if playerFront and not enemyFront then
+        drawFighter(state, state.enemy, p2Frames)
+        drawFighter(state, state.player, p1Frames)
+    elseif enemyFront and not playerFront then
+        drawFighter(state, state.player, p1Frames)
+        drawFighter(state, state.enemy, p2Frames)
+    elseif state.frontSwap then
         drawFighter(state, state.player, p1Frames)
         drawFighter(state, state.enemy, p2Frames)
     else
@@ -957,6 +971,14 @@ function game.paint(state)
         local effect = state.hitEffect.usePow and state.assets.pow or state.assets.bam
         if effect then
             drawBitmapScaled(state, effect, state.hitEffect.x, state.hitEffect.y, EFFECT_SIZE, EFFECT_SIZE)
+        end
+    end
+    if state.punchEffect then
+        local effect = state.punchEffect.usePow and state.assets.pow or state.assets.bam
+        if effect then
+            local ex = clamp(state.punchEffect.x, 0, TARGET_W - EFFECT_SIZE)
+            local ey = clamp(state.punchEffect.y, 0, TARGET_H - EFFECT_SIZE)
+            drawBitmapScaled(state, effect, ex, ey, EFFECT_SIZE, EFFECT_SIZE)
         end
     end
     drawHud(state)
