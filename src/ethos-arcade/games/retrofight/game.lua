@@ -42,7 +42,7 @@ local ENEMY_JUMP_CHANCE = 0.8
 local SPRITE_W = 160
 local SPRITE_H = 220
 local MIN_SEPARATION = 80
-local EFFECT_SIZE = 120
+local EFFECT_SIZE = 80
 local EFFECT_DURATION = 0.55
 
 local function keyMatches(value, ...)
