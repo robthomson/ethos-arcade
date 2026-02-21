@@ -1,7 +1,6 @@
 local game = {}
 
-local HORIZONTAL_SOURCE_PREFERRED = "Ail"
-local HORIZONTAL_SOURCE_CANDIDATES = {"Ail", "Aileron", "Roll", "P1", "S1"}
+local HORIZONTAL_SOURCE_MEMBER = 3
 
 local CONFIG_BUTTON_CATEGORY = 0
 local CONFIG_BUTTON_VALUE = 128
@@ -455,19 +454,13 @@ local function updateFrameScale(state)
     state.frameScale = clamp(dt / FRAME_TARGET_DT, FRAME_SCALE_MIN, FRAME_SCALE_MAX)
 end
 
-local function resolveSource(candidates, preferredName)
-    if type(preferredName) == "string" and preferredName ~= "" then
-        local preferred = system.getSource(preferredName)
-        if preferred then
-            return preferred
-        end
+local function resolveAnalogSource(member)
+    if not system or not system.getSource then
+        return nil
     end
-
-    for _, name in ipairs(candidates) do
-        local src = system.getSource(name)
-        if src then
-            return src
-        end
+    local ok, src = pcall(system.getSource, {category = CATEGORY_ANALOG, member = member})
+    if ok then
+        return src
     end
     return nil
 end
@@ -1081,7 +1074,7 @@ local function createState()
             {104, 158, 236}
         },
 
-        moveSourceX = resolveSource(HORIZONTAL_SOURCE_CANDIDATES, HORIZONTAL_SOURCE_PREFERRED),
+        moveSourceX = resolveAnalogSource(HORIZONTAL_SOURCE_MEMBER),
         lastRawInputByAxis = {},
 
         frameScale = 1,
@@ -1114,7 +1107,7 @@ function game.wakeup(state)
     refreshGeometry(state)
 
     if not state.moveSourceX then
-        state.moveSourceX = resolveSource(HORIZONTAL_SOURCE_CANDIDATES, HORIZONTAL_SOURCE_PREFERRED)
+        state.moveSourceX = resolveAnalogSource(HORIZONTAL_SOURCE_MEMBER)
     end
 
     if state.settingsFormOpen then

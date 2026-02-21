@@ -127,6 +127,20 @@ local function nowSeconds()
     return 0
 end
 
+local function suppressExitEvents(state, windowSeconds)
+    if not state then
+        return
+    end
+    state.suppressExitUntil = nowSeconds() + (windowSeconds or 0.35)
+end
+
+local function shouldSuppressExit(state)
+    if not state or not state.suppressExitUntil then
+        return false
+    end
+    return nowSeconds() < state.suppressExitUntil
+end
+
 local function loadIcon(path)
     local okMask, mask = pcall(lcd.loadMask, path)
     if okMask and mask then
@@ -206,6 +220,43 @@ local function clearMenuForm(state)
     end
 end
 
+local function releaseAssets(value, visited)
+    if value == nil then
+        return
+    end
+    local valueType = type(value)
+    if valueType == "userdata" then
+        return
+    end
+    if valueType ~= "table" then
+        return
+    end
+    if not visited then
+        visited = {}
+    end
+    if visited[value] then
+        return
+    end
+    visited[value] = true
+
+    for key, item in pairs(value) do
+        local keyType = type(key)
+        local itemType = type(item)
+        local keyName = keyType == "string" and key:lower() or ""
+        if itemType == "userdata" then
+            value[key] = nil
+        elseif itemType == "table" then
+            if keyName:find("bitmap", 1, true) or keyName:find("mask", 1, true) or keyName:find("image", 1, true) then
+                value[key] = nil
+            else
+                releaseAssets(item, visited)
+            end
+        elseif keyType == "string" and (keyName:find("bitmap", 1, true) or keyName:find("mask", 1, true) or keyName:find("image", 1, true)) then
+            value[key] = nil
+        end
+    end
+end
+
 local function stopActiveGame(state)
     if not state then
         return
@@ -221,6 +272,10 @@ local function stopActiveGame(state)
 
     if state.activeModule and state.activeState and type(state.activeModule.close) == "function" then
         pcall(state.activeModule.close, state.activeState)
+    end
+
+    if state.activeState then
+        releaseAssets(state.activeState)
     end
 
     if state.activeDef then
@@ -243,6 +298,10 @@ local function stopActiveGame(state)
             local beforeText = memBefore and string.format("%.1f", memBefore) or "n/a"
             print(string.format("[arcade gc] before=%sKB after=%.1fKB", beforeText, after))
         end
+    end
+
+    if lcd and lcd.invalidate then
+        pcall(lcd.invalidate)
     end
 end
 
@@ -402,12 +461,14 @@ local function handleActiveGameEvent(state, category, value)
     end
 
     if isCloseEvent(category) then
+        suppressExitEvents(state)
         stopActiveGame(state)
         return true
     end
 
     -- Fallback only if the active game did not consume the event.
     if isExitKeyEvent(category, value) then
+        suppressExitEvents(state)
         stopActiveGame(state)
         return true
     end
@@ -425,7 +486,8 @@ local function createState()
         menuButtons = nil,
         menuClearRequested = false,
         lastFocusKick = 0,
-        lastError = nil
+        lastError = nil,
+        suppressExitUntil = 0
     }
 
     for _, def in ipairs(games) do
@@ -473,6 +535,10 @@ function app.event(state, category, value)
 
     if state.activeModule then
         return handleActiveGameEvent(state, category, value)
+    end
+
+    if isExitKeyEvent(category, value) and shouldSuppressExit(state) then
+        return true
     end
 
     -- In menu mode, let Ethos form widgets handle key navigation/press.

@@ -1,11 +1,8 @@
 local game = {}
 
-local ROLL_SOURCE_PREFERRED = "Ail"
-local ROLL_SOURCE_CANDIDATES = {"Ail", "Aileron", "Roll", "P1", "S1"}
-local PITCH_SOURCE_PREFERRED = "Ele"
-local PITCH_SOURCE_CANDIDATES = {"Ele", "Elevator", "Pitch", "P2", "S2"}
-local THROTTLE_SOURCE_PREFERRED = "Thr"
-local THROTTLE_SOURCE_CANDIDATES = {"Thr", "Throttle", "THR", "Tht", "Gas", "P3", "S3"}
+local ROLL_SOURCE_MEMBER = 3
+local PITCH_SOURCE_MEMBER = 1
+local THROTTLE_SOURCE_MEMBER = 2
 
 local CONFIG_BUTTON_CATEGORY = 0
 local CONFIG_BUTTON_VALUE = 128
@@ -466,21 +463,14 @@ local function updateFrameScale(state)
     state.frameScale = clamp(dt / FRAME_TARGET_DT, FRAME_SCALE_MIN, FRAME_SCALE_MAX)
 end
 
-local function resolveSource(candidates, preferredName)
-    if type(preferredName) == "string" and preferredName ~= "" then
-        local preferred = system.getSource(preferredName)
-        if preferred then
-            return preferred
-        end
+local function resolveAnalogSource(member)
+    if not system or not system.getSource then
+        return nil
     end
-
-    for _, name in ipairs(candidates) do
-        local src = system.getSource(name)
-        if src then
-            return src
-        end
+    local ok, src = pcall(system.getSource, {category = CATEGORY_ANALOG, member = member})
+    if ok then
+        return src
     end
-
     return nil
 end
 
@@ -1518,9 +1508,9 @@ local function createState()
         objectCounter = 0,
         objects = {},
 
-        rollSource = resolveSource(ROLL_SOURCE_CANDIDATES, ROLL_SOURCE_PREFERRED),
-        pitchSource = resolveSource(PITCH_SOURCE_CANDIDATES, PITCH_SOURCE_PREFERRED),
-        throttleSource = resolveSource(THROTTLE_SOURCE_CANDIDATES, THROTTLE_SOURCE_PREFERRED),
+        rollSource = resolveAnalogSource(ROLL_SOURCE_MEMBER),
+        pitchSource = resolveAnalogSource(PITCH_SOURCE_MEMBER),
+        throttleSource = resolveAnalogSource(THROTTLE_SOURCE_MEMBER),
         lastRawInputByAxis = {},
 
         frameScale = 1,
@@ -1554,13 +1544,13 @@ function game.wakeup(state)
     refreshGeometry(state)
 
     if not state.rollSource then
-        state.rollSource = resolveSource(ROLL_SOURCE_CANDIDATES, ROLL_SOURCE_PREFERRED)
+        state.rollSource = resolveAnalogSource(ROLL_SOURCE_MEMBER)
     end
     if not state.pitchSource then
-        state.pitchSource = resolveSource(PITCH_SOURCE_CANDIDATES, PITCH_SOURCE_PREFERRED)
+        state.pitchSource = resolveAnalogSource(PITCH_SOURCE_MEMBER)
     end
     if not state.throttleSource then
-        state.throttleSource = resolveSource(THROTTLE_SOURCE_CANDIDATES, THROTTLE_SOURCE_PREFERRED)
+        state.throttleSource = resolveAnalogSource(THROTTLE_SOURCE_MEMBER)
     end
 
     if state.settingsFormOpen then

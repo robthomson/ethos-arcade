@@ -26,8 +26,8 @@ local TARGET_VARIANT_FILES = {
     {"gfx/target4.png"}
 }
 
-local SOURCE_CANDIDATES_X = {"Ail", "Aileron", "Roll"}
-local SOURCE_CANDIDATES_Y = {"Ele", "Elevator", "Pitch"}
+local SOURCE_X_MEMBER = 3
+local SOURCE_Y_MEMBER = 1
 
 local CONFIG_FILE = "gulaxian.cfg"
 local CONFIG_VERSION = 1
@@ -63,10 +63,13 @@ local function clamp(v, lo, hi)
     return v
 end
 
-local function resolveSource(candidates)
-    for _, name in ipairs(candidates) do
-        local src = system.getSource(name)
-        if src then return src end
+local function resolveAnalogSource(member)
+    if not system or not system.getSource then
+        return nil
+    end
+    local ok, src = pcall(system.getSource, {category = CATEGORY_ANALOG, member = member})
+    if ok then
+        return src
     end
     return nil
 end
@@ -601,8 +604,8 @@ local function createState()
         startOnNextEnterFirst = false,
         pendingFormClear = false,
 
-        shipSourceX = resolveSource(SOURCE_CANDIDATES_X),
-        shipSourceY = resolveSource(SOURCE_CANDIDATES_Y)
+        shipSourceX = resolveAnalogSource(SOURCE_X_MEMBER),
+        shipSourceY = resolveAnalogSource(SOURCE_Y_MEMBER)
     }
 
     initBitmaps(state)
