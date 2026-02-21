@@ -39,6 +39,13 @@ local games = {
         iconPath = "games/luadefender/gfx/icon.png"
     },
     {
+        id = "retrofight",
+        name = "RetroFight",
+        description = "8-bit stick-and-punch brawler",
+        modulePath = "games/retrofight/game.lua",
+        iconPath = "games/retrofight/gfx/icon.png"
+    },
+    {
         id = "luabreaks",
         name = "LuaBreaks",
         description = "Brick breaker blitz",
