@@ -171,6 +171,10 @@ local function mapInputToArea(value, minValue, maxValue)
 end
 
 local function setColor(r, g, b)
+    if lcd and lcd.color and lcd.RGB then
+        pcall(lcd.color, lcd.RGB(r, g, b))
+        return
+    end
     if lcd and lcd.setColor then
         pcall(lcd.setColor, r, g, b)
     end
@@ -553,20 +557,29 @@ local function render(state)
         end
     end
 
-    local cross = 10
+    local cross = 12
+    local ring = 14
+    setColor(0, 0, 0)
+    lcd.drawCircle(state.aimX, state.aimY, ring + 1)
+    lcd.drawLine(state.aimX - cross - 1, state.aimY, state.aimX + cross + 1, state.aimY)
+    lcd.drawLine(state.aimX, state.aimY - cross - 1, state.aimX, state.aimY + cross + 1)
+
     setColor(255, 230, 120)
+    lcd.drawCircle(state.aimX, state.aimY, ring)
     lcd.drawLine(state.aimX - cross, state.aimY, state.aimX + cross, state.aimY)
     lcd.drawLine(state.aimX, state.aimY - cross, state.aimX, state.aimY + cross)
     lcd.drawRectangle(state.aimX - 3, state.aimY - 3, 6, 6)
 
-    setColor(240, 240, 240)
-    lcd.drawText(6, 2, string.format("Score %d", state.score or 0))
-    lcd.drawText(6, 18, string.format("Best %d", state.config.bestScore or 0))
-    lcd.drawText(6, 34, string.format("Diff %s", difficultyLabel(state.config.difficulty)))
+    setColor(0, 0, 0)
+    local scoreLine = string.format("Score %d  Best %d  Diff %s", state.score or 0, state.config.bestScore or 0, difficultyLabel(state.config.difficulty))
+    local estimateW = #scoreLine * 6
+    local scoreX = math.floor((state.width - estimateW) * 0.5)
+    if scoreX < 2 then scoreX = 2 end
+    lcd.drawText(scoreX, 2, scoreLine)
 
     if not state.running and state.showIntro then
-        local boxW = math.floor(state.width * 0.72)
-        local boxH = math.floor(state.height * 0.38)
+        local boxW = math.floor(state.width * 0.78)
+        local boxH = math.floor(state.height * 0.48)
         local boxX = math.floor((state.width - boxW) * 0.5)
         local boxY = math.floor((state.height - boxH) * 0.5)
 
@@ -576,12 +589,13 @@ local function render(state)
         lcd.drawRectangle(boxX, boxY, boxW, boxH)
 
         setColor(255, 255, 255)
-        lcd.drawText(boxX + 12, boxY + 10, "Shooter")
-        lcd.drawText(boxX + 12, boxY + 32, "Aim: Aileron / Elevator")
-        lcd.drawText(boxX + 12, boxY + 50, "Fire: Page")
-        lcd.drawText(boxX + 12, boxY + 68, "Enter: start")
-        lcd.drawText(boxX + 12, boxY + 86, "Exit: back to arcade")
-        lcd.drawText(boxX + 12, boxY + 104, "Long Enter: settings")
+        lcd.drawText(boxX + 14, boxY + 14, "Shooter")
+        lcd.drawText(boxX + 14, boxY + 38, "Make sure you shoot the right bird")
+        lcd.drawText(boxX + 14, boxY + 64, "Aim: Aileron / Elevator")
+        lcd.drawText(boxX + 14, boxY + 88, "Fire: Page")
+        lcd.drawText(boxX + 14, boxY + 112, "Enter: start")
+        lcd.drawText(boxX + 14, boxY + 136, "Exit: back to arcade")
+        lcd.drawText(boxX + 14, boxY + 160, "Long Enter: settings")
     end
 
 end
