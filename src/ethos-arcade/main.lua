@@ -127,6 +127,20 @@ local function nowSeconds()
     return 0
 end
 
+local function suppressExitEvents(state, windowSeconds)
+    if not state then
+        return
+    end
+    state.suppressExitUntil = nowSeconds() + (windowSeconds or 0.35)
+end
+
+local function shouldSuppressExit(state)
+    if not state or not state.suppressExitUntil then
+        return false
+    end
+    return nowSeconds() < state.suppressExitUntil
+end
+
 local function loadIcon(path)
     local okMask, mask = pcall(lcd.loadMask, path)
     if okMask and mask then
@@ -402,12 +416,14 @@ local function handleActiveGameEvent(state, category, value)
     end
 
     if isCloseEvent(category) then
+        suppressExitEvents(state)
         stopActiveGame(state)
         return true
     end
 
     -- Fallback only if the active game did not consume the event.
     if isExitKeyEvent(category, value) then
+        suppressExitEvents(state)
         stopActiveGame(state)
         return true
     end
@@ -425,7 +441,8 @@ local function createState()
         menuButtons = nil,
         menuClearRequested = false,
         lastFocusKick = 0,
-        lastError = nil
+        lastError = nil,
+        suppressExitUntil = 0
     }
 
     for _, def in ipairs(games) do
@@ -473,6 +490,10 @@ function app.event(state, category, value)
 
     if state.activeModule then
         return handleActiveGameEvent(state, category, value)
+    end
+
+    if isExitKeyEvent(category, value) and shouldSuppressExit(state) then
+        return true
     end
 
     -- In menu mode, let Ethos form widgets handle key navigation/press.
