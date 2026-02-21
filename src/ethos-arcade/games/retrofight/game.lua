@@ -962,7 +962,7 @@ local function updateGame(state, dt)
 
     if (state.player.ko or state.enemy.ko) and state.running then
         state.running = false
-        state.winner = state.player.ko and "Enemy" or "Player"
+        state.winner = state.player.ko and "CPU" or "Player"
     end
 end
 
@@ -1014,7 +1014,7 @@ end
 
 local function drawHud(state)
     -- Player starts on the right, so swap HUD sides to match.
-    drawHealthBar(state, 24, 18, "P2", state.enemy.health, 2)
+    drawHealthBar(state, 24, 18, "CPU", state.enemy.health, 2)
     drawHealthBar(state, TARGET_W - 24 - 220, 18, "P1", state.player.health, 1)
 end
 
