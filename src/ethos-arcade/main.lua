@@ -220,6 +220,43 @@ local function clearMenuForm(state)
     end
 end
 
+local function releaseAssets(value, visited)
+    if value == nil then
+        return
+    end
+    local valueType = type(value)
+    if valueType == "userdata" then
+        return
+    end
+    if valueType ~= "table" then
+        return
+    end
+    if not visited then
+        visited = {}
+    end
+    if visited[value] then
+        return
+    end
+    visited[value] = true
+
+    for key, item in pairs(value) do
+        local keyType = type(key)
+        local itemType = type(item)
+        local keyName = keyType == "string" and key:lower() or ""
+        if itemType == "userdata" then
+            value[key] = nil
+        elseif itemType == "table" then
+            if keyName:find("bitmap", 1, true) or keyName:find("mask", 1, true) or keyName:find("image", 1, true) then
+                value[key] = nil
+            else
+                releaseAssets(item, visited)
+            end
+        elseif keyType == "string" and (keyName:find("bitmap", 1, true) or keyName:find("mask", 1, true) or keyName:find("image", 1, true)) then
+            value[key] = nil
+        end
+    end
+end
+
 local function stopActiveGame(state)
     if not state then
         return
@@ -235,6 +272,10 @@ local function stopActiveGame(state)
 
     if state.activeModule and state.activeState and type(state.activeModule.close) == "function" then
         pcall(state.activeModule.close, state.activeState)
+    end
+
+    if state.activeState then
+        releaseAssets(state.activeState)
     end
 
     if state.activeDef then
