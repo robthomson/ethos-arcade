@@ -1,11 +1,8 @@
 local game = {}
 
-local HORIZONTAL_SOURCE_PREFERRED = "Ail"
-local HORIZONTAL_SOURCE_CANDIDATES = {"Ail", "Aileron", "Roll", "P1", "S1"}
-local ROTATE_SOURCE_PREFERRED = "Ele"
-local ROTATE_SOURCE_CANDIDATES = {"Ele", "Elevator", "Pitch", "P2", "S2", "Ail", "Aileron", "Roll"}
-local DROP_SOURCE_PREFERRED = "Rud"
-local DROP_SOURCE_CANDIDATES = {"Rud", "Rudder", "Yaw"}
+local HORIZONTAL_SOURCE_MEMBER = 3
+local ROTATE_SOURCE_MEMBER = 1
+local DROP_SOURCE_MEMBER = 0
 local CONFIG_BUTTON_CATEGORY = 0
 local CONFIG_BUTTON_VALUE = 128
 local CONFIG_FILE = "txtris.cfg"
@@ -474,19 +471,13 @@ local function openSettingsForm(state)
     return true
 end
 
-local function resolveSource(candidates, preferredName)
-    if type(preferredName) == "string" and preferredName ~= "" then
-        local preferred = system.getSource(preferredName)
-        if preferred then
-            return preferred
-        end
+local function resolveAnalogSource(member)
+    if not system or not system.getSource then
+        return nil
     end
-
-    for _, name in ipairs(candidates) do
-        local src = system.getSource(name)
-        if src then
-            return src
-        end
+    local ok, src = pcall(system.getSource, {category = CATEGORY_ANALOG, member = member})
+    if ok then
+        return src
     end
     return nil
 end
@@ -1298,9 +1289,9 @@ local function createState()
         lastFrameTime = 0,
         nextInvalidateAt = 0,
         config = loadedConfig,
-        moveSourceX = resolveSource(HORIZONTAL_SOURCE_CANDIDATES, HORIZONTAL_SOURCE_PREFERRED),
-        rotateSource = resolveSource(ROTATE_SOURCE_CANDIDATES, ROTATE_SOURCE_PREFERRED),
-        dropSource = resolveSource(DROP_SOURCE_CANDIDATES, DROP_SOURCE_PREFERRED),
+        moveSourceX = resolveAnalogSource(HORIZONTAL_SOURCE_MEMBER),
+        rotateSource = resolveAnalogSource(ROTATE_SOURCE_MEMBER),
+        dropSource = resolveAnalogSource(DROP_SOURCE_MEMBER),
         settingsFormOpen = false,
         pendingFormClear = false,
         lastRawInputByAxis = {},
@@ -1329,13 +1320,13 @@ function game.wakeup(state)
     flushPendingFormClear(state)
     refreshGeometry(state)
     if not state.moveSourceX then
-        state.moveSourceX = resolveSource(HORIZONTAL_SOURCE_CANDIDATES, HORIZONTAL_SOURCE_PREFERRED)
+        state.moveSourceX = resolveAnalogSource(HORIZONTAL_SOURCE_MEMBER)
     end
     if not state.rotateSource then
-        state.rotateSource = resolveSource(ROTATE_SOURCE_CANDIDATES, ROTATE_SOURCE_PREFERRED)
+        state.rotateSource = resolveAnalogSource(ROTATE_SOURCE_MEMBER)
     end
     if not state.dropSource then
-        state.dropSource = resolveSource(DROP_SOURCE_CANDIDATES, DROP_SOURCE_PREFERRED)
+        state.dropSource = resolveAnalogSource(DROP_SOURCE_MEMBER)
     end
     if state.settingsFormOpen then
         return

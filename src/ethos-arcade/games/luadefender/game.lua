@@ -1,11 +1,8 @@
 local game = {}
 
-local MOVE_X_SOURCE_PREFERRED = "Ail"
-local MOVE_X_SOURCE_CANDIDATES = {"Ail", "Aileron", "Roll", "P1", "S1"}
-local MOVE_Y_SOURCE_PREFERRED = "Ele"
-local MOVE_Y_SOURCE_CANDIDATES = {"Ele", "Elevator", "Pitch", "P2", "S2"}
-local FIRE_SOURCE_PREFERRED = "Rud"
-local FIRE_SOURCE_CANDIDATES = {"Rud", "Rudder", "Yaw", "P4", "S4", "Thr", "Throttle", "THR", "Tht", "Gas", "P3", "S3"}
+local MOVE_X_SOURCE_MEMBER = 3
+local MOVE_Y_SOURCE_MEMBER = 1
+local FIRE_SOURCE_MEMBER = 0
 
 local CONFIG_BUTTON_CATEGORY = 0
 local CONFIG_BUTTON_VALUE = 128
@@ -755,19 +752,13 @@ local function updateFrameScale(state)
     state.frameScale = clamp(dt / FRAME_TARGET_DT, FRAME_SCALE_MIN, FRAME_SCALE_MAX)
 end
 
-local function resolveSource(candidates, preferredName)
-    if type(preferredName) == "string" and preferredName ~= "" then
-        local preferred = system.getSource(preferredName)
-        if preferred then
-            return preferred
-        end
+local function resolveAnalogSource(member)
+    if not system or not system.getSource then
+        return nil
     end
-
-    for _, name in ipairs(candidates) do
-        local src = system.getSource(name)
-        if src then
-            return src
-        end
+    local ok, src = pcall(system.getSource, {category = CATEGORY_ANALOG, member = member})
+    if ok then
+        return src
     end
     return nil
 end
@@ -1845,9 +1836,9 @@ local function createState()
         lastMissingAssetSignature = "",
         stars = nil,
 
-        moveSourceX = resolveSource(MOVE_X_SOURCE_CANDIDATES, MOVE_X_SOURCE_PREFERRED),
-        moveSourceY = resolveSource(MOVE_Y_SOURCE_CANDIDATES, MOVE_Y_SOURCE_PREFERRED),
-        fireSource = resolveSource(FIRE_SOURCE_CANDIDATES, FIRE_SOURCE_PREFERRED),
+        moveSourceX = resolveAnalogSource(MOVE_X_SOURCE_MEMBER),
+        moveSourceY = resolveAnalogSource(MOVE_Y_SOURCE_MEMBER),
+        fireSource = resolveAnalogSource(FIRE_SOURCE_MEMBER),
         lastRawInputByAxis = {},
 
         frameScale = 1,
@@ -1887,13 +1878,13 @@ function game.wakeup(state)
     refreshRequiredAssets(state)
 
     if not state.moveSourceX then
-        state.moveSourceX = resolveSource(MOVE_X_SOURCE_CANDIDATES, MOVE_X_SOURCE_PREFERRED)
+        state.moveSourceX = resolveAnalogSource(MOVE_X_SOURCE_MEMBER)
     end
     if not state.moveSourceY then
-        state.moveSourceY = resolveSource(MOVE_Y_SOURCE_CANDIDATES, MOVE_Y_SOURCE_PREFERRED)
+        state.moveSourceY = resolveAnalogSource(MOVE_Y_SOURCE_MEMBER)
     end
     if not state.fireSource then
-        state.fireSource = resolveSource(FIRE_SOURCE_CANDIDATES, FIRE_SOURCE_PREFERRED)
+        state.fireSource = resolveAnalogSource(FIRE_SOURCE_MEMBER)
     end
 
     if state.settingsFormOpen then

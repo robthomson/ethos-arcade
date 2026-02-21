@@ -1,9 +1,7 @@
 local game = {}
 
-local PLAYER_SOURCE_PREFERRED = "Ele"
-local STICK_SOURCE_CANDIDATES = {"Ele", "Elevator", "Ail", "Aileron", "P1", "S1"}
-local PLAYER2_SOURCE_PREFERRED = "Thr"
-local PLAYER2_SOURCE_CANDIDATES = {"Thr", "Throttle", "THR", "Tht", "Gas", "P2", "S2"}
+local PLAYER_SOURCE_MEMBER = 1
+local PLAYER2_SOURCE_MEMBER = 2
 local MAX_SCORE = 7
 local ACTIVE_RENDER_FPS = 40
 local IDLE_RENDER_FPS = 12
@@ -114,19 +112,13 @@ local function isExitKeyEvent(category, value)
     return value == 35
 end
 
-local function resolveSource(candidates, preferredName)
-    if type(preferredName) == "string" and preferredName ~= "" then
-        local preferred = system.getSource(preferredName)
-        if preferred then
-            return preferred
-        end
+local function resolveAnalogSource(member)
+    if not system or not system.getSource then
+        return nil
     end
-
-    for _, name in ipairs(candidates) do
-        local src = system.getSource(name)
-        if src then
-            return src
-        end
+    local ok, src = pcall(system.getSource, {category = CATEGORY_ANALOG, member = member})
+    if ok then
+        return src
     end
     return nil
 end
@@ -490,7 +482,7 @@ local function applyConfigSideEffects(state, key)
     if key == "mode" then
         state.config.mode = normalizeMode(state.config.mode)
         if state.config.mode == MODE_TWO_PLAYER and not state.player2Source then
-            state.player2Source = resolveSource(PLAYER2_SOURCE_CANDIDATES, PLAYER2_SOURCE_PREFERRED)
+            state.player2Source = resolveAnalogSource(PLAYER2_SOURCE_MEMBER)
         end
         resetAiBehavior(state)
     elseif key == "difficulty" then
@@ -1205,8 +1197,8 @@ local function createState()
         frameScale = 1,
         lastFrameTime = 0,
         nextInvalidateAt = 0,
-        playerSource = resolveSource(STICK_SOURCE_CANDIDATES, PLAYER_SOURCE_PREFERRED),
-        player2Source = resolveSource(PLAYER2_SOURCE_CANDIDATES, PLAYER2_SOURCE_PREFERRED),
+        playerSource = resolveAnalogSource(PLAYER_SOURCE_MEMBER),
+        player2Source = resolveAnalogSource(PLAYER2_SOURCE_MEMBER),
         lastFocusKick = 0
     }
 
@@ -1227,10 +1219,10 @@ function game.wakeup(state)
     flushPendingFormClear(state)
     refreshGeometry(state)
     if not state.playerSource then
-        state.playerSource = resolveSource(STICK_SOURCE_CANDIDATES, PLAYER_SOURCE_PREFERRED)
+        state.playerSource = resolveAnalogSource(PLAYER_SOURCE_MEMBER)
     end
     if isTwoPlayerMode(state) and not state.player2Source then
-        state.player2Source = resolveSource(PLAYER2_SOURCE_CANDIDATES, PLAYER2_SOURCE_PREFERRED)
+        state.player2Source = resolveAnalogSource(PLAYER2_SOURCE_MEMBER)
     end
     if state.settingsFormOpen then
         return
